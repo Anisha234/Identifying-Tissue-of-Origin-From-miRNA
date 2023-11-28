@@ -1,8 +1,11 @@
+
 import requests
 import json
 import re
 import pandas as pd
 import argparse
+
+#This script is built based on the examples at https://docs.gdc.cancer.gov/API/Users_Guide/Python_Examples/
 
 fields = [
     "file_name",
@@ -12,8 +15,6 @@ fields = [
     'cases.project.primary_site',
     "cases.demographic.gender",
     "cases.demographic.days_to_birth",
-    #"cases.exposures.years_smoked",
-    #"cases.exposures.alcohol_history",
     ]
 
 fields = ",".join(fields)
@@ -21,21 +22,25 @@ fields = ",".join(fields)
 files_endpt = "https://api.gdc.cancer.gov/files"
 
 def get_filter(primary_site, tissue_type, mode):
-# This set of filters is nested under an 'and' operator.
+
     if mode =='mRNA':
         data_category = "transcriptome profiling"
         data_type="Gene Expression Quantification"
         data_format="TSV"
-    if mode =='miRNA':
+    elif mode =='miRNA':
         data_category = "transcriptome profiling"
         data_type="miRNA Expression Quantification"
         data_format="TXT"
-    if mode=='Methylation':
+    elif mode=='Methylation':
         data_category='DNA Methylation'
         data_type="Methylation Beta Value"
         data_format="TXT"
+    else:
+        print("Incorrect mode specified. Please enter mRNA, miRNA, Methylation")
+        exit(-1)
+    
  
-
+# This set of filters is nested under an 'and' operator.
     filters = {
         "op": "and",
         "content":[
@@ -51,7 +56,6 @@ def get_filter(primary_site, tissue_type, mode):
             "content":{
                 "field": "cases.samples.sample_type",
                 "value": tissue_type
-              #  "value": ["Blood Derived Normal", "Solid Tissue Normal"]
                 }
             },
             {
@@ -60,7 +64,7 @@ def get_filter(primary_site, tissue_type, mode):
                 "field": "files.data_category",
                 "value": [data_category]
                 }
-            },
+            }, 
             {
             "op": "in",
             "content":{
@@ -86,6 +90,17 @@ argParser.add_argument('-t', '--tissue_type', nargs='+', default=[])
 argParser.add_argument("-m", "--data", help="data (mRNA, miRNA, Methylation)")
 args = argParser.parse_args()
 
+if len(args.cancer_list) == 0:
+    print("Cancer type is not specified. Please use the -n option to specify cancer types.")
+    exit(-1)
+
+if len(args.tissue_type) == 0:
+    print("Tissue type is not specified. Please use the -t option to specify tissue types.")
+    exit(-1)
+
+if args.data != "miRNA":
+    print("-m needs to be set to miRNA")
+    exit(-1)
 
 mode = args.data
 cancer_site=args.cancer_list
@@ -97,7 +112,7 @@ params = {
     "filters": filters,
     "fields": fields,
     "format": "CSV",
-    "size": "10000"
+    "size": "10"
     }
 
 # The parameters are passed to 'json' rather than 'params' in this case
@@ -115,27 +130,7 @@ with open("my_file_met.csv", "wb") as binary_file:
   
 # assign dataset
 csvData = pd.read_csv("my_file_met.csv")
-                                         
-# displaying unsorted data frame
-print("\nBefore sorting:")
 print(csvData)
-  
-# sort data frame
-csvData.sort_values(["cases.0.case_id"], 
-                    axis=0,
-                    ascending=[False], 
-                    inplace=True)
-  
-# displaying sorted data frame
-print("\nAfter sorting:")
-print(csvData)
-
-
-
-# Remove rows where a key occurs only once
-#fname = 'df2_'+ mode +'.csv'
-#csvData.to_csv(fname,index=False)
-
 def download_data(file_ids):
 # Now get the file ids
 
@@ -148,9 +143,6 @@ def download_data(file_ids):
     response_head_cd = response.headers["Content-Disposition"]
     file_name = re.findall("filename=(.+)", response_head_cd)[0]
     print(file_name)
-
-
-
 
 
     with open(file_name, "wb") as output_file:
