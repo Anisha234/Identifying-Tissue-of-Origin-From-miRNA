@@ -3,67 +3,43 @@ import numpy as np
 import glob
 import argparse
 
-def assemble_data_frame(mode, df_mRNA, c_mRNA,base_dir, columns_to_keep, extension='tsv',skiprows=None):
-    
-    total_data=pd.DataFrame()
-    genes=['case_id']
-    print('Number of Files', len(c_mRNA))
+def assemble_data_frame(df_mRNA,base_dir, columns_to_keep, skiprows=None):
+    #this function creates the entire dataframe by concatenating the rows specified in each filename from the info_file
+   
+    cols_in_total_data=['case_id'] #columns in total_data
     idx=0
     for case_id,id, fname in zip(df_mRNA['cases.0.case_id'], df_mRNA['id'], df_mRNA['file_name']):
         # Load all files for mRNA and filter it
 
         dir_to_load=base_dir+'\\'+id+'\\'
-       # print(dir_to_load)
+
         file_to_load = dir_to_load+fname
-        #print(idx, file_to_load)
-        if mode =='Methylation':
-           data=pd.read_csv(file_to_load,delimiter='\t',skiprows= skiprows,header=None, names=['gene_name', 'Methylation'])
-        else:
-           data=pd.read_csv(file_to_load,delimiter='\t',skiprows= skiprows)
+    
+
+        data=pd.read_csv(file_to_load,delimiter='\t',skiprows= skiprows) #data for one person
  
-        genes.extend(list(data[columns_to_keep[0]]))
+        
         data = data[columns_to_keep]
         if idx==0:
-            total_data=pd.DataFrame(columns=genes)
-            print('idx0', total_data)
+            cols_in_total_data.extend(list(data[columns_to_keep[0]])) #gets the miRNA names. 
+            #creates the names for all the columns in an empty dataframe
+            total_data=pd.DataFrame(columns=cols_in_total_data) 
 
 
         case_data=[case_id]
-        case_data.extend(list(data[columns_to_keep[1]]))
+        #extend the row with the rpms for each sample in for loop
+        case_data.extend(list(data[columns_to_keep[1]])) 
 
         if idx%100 == 0:
             print(idx)
             print(total_data.shape)
-        if mode=='Methylation':
-            newFrame=pd.DataFrame(columns=genes)
-            newFrame.loc[0]=case_data
-            total_data=total_data.merge(newFrame,how='outer')
-            print('TotalData', total_data.shape)
-        else:
-            total_data.loc[idx]=case_data
+        
+
+        total_data.loc[idx]=case_data
         idx=idx+1
-    #    print(total_data.head())
+
     return total_data
 
-
-
-def remove_outliers(dataframe,  threshold_low, threshold_hi):
-    '''
-    Function to remove outliers where less than a threshold and higher than another threshold from a dataframe
-    Returns the updated dataframe with the outliers removed.
-    '''
-    df1 = dataframe.sum(axis=1)
-    dataframe['sum'] = df1
-
-    low_valid = dataframe['sum'] > threshold_low
-    hi_valid = dataframe['sum'] < threshold_hi
-    column_valid = [a and b for a,b in zip(low_valid,hi_valid)] #take all columns satisfiying low valid and high valid
-
-    dataframe = dataframe.drop(columns=['sum'])
-    truncated_data = dataframe[column_valid]
-    removeAmount = list(dataframe.shape)[0] - list(truncated_data.shape)[0]
-
-    return truncated_data
 
 def get_meta_data(df,case_id):
     print('In get meta data')
@@ -81,7 +57,7 @@ def get_meta_data(df,case_id):
                  "Brain", "Cervix", "Thyroid"]
     df=df.loc[df['cases.0.project.primary_site'].isin(disease_labels)]
   
-    df.replace(disease_labels,list(range(len(disease_labels))),
+    df.replace(disease_labels,list(range(len(disease_labels))), #categorical encoding
               inplace=True)
  
     
@@ -91,9 +67,6 @@ def get_meta_data(df,case_id):
     df.replace('False', 0, inplace=True)
     df.replace('not reported',0, inplace=True)
  
-
-   # df.drop(columns=['cases.0.project.primary_site'])
-   
     return df
 
 def remove_outliers_zeros(df,  percent_zero_threshold):
@@ -105,15 +78,11 @@ def remove_outliers_zeros(df,  percent_zero_threshold):
     b = (df == 0).sum(axis='rows')
     print(b)
     df= df.loc[:, b<=column_cut_off]
-    #num_zeros = (dataframe == 0).sum(axis=0)
-    #percent_zero = num_zeros/dataframe.shape[0]
-    #print(num_zeros)
-    #df = dataframe[percent_zero < percent_zero_threshold]
     return df
 
 def clean_data(df, percent_zero_threshold):
     print(df.shape)
-    df=df.dropna()
+    df=df.dropna() # drop rows that contain NaNs 
     print(df.shape)
     df=remove_outliers_zeros(df,percent_zero_threshold)
     print(df.shape)
@@ -121,9 +90,7 @@ def clean_data(df, percent_zero_threshold):
 
 
 
-#df_mRNA =pd.read_csv('df_mRNA.csv')
-#print(df_mRNA.shape)
-#print(df_mRNA.head())
+
 argParser = argparse.ArgumentParser()
 argParser.add_argument('-f', '--info_file',help="file name with file ids")
 argParser.add_argument('-d', '--directory', help="directory with miRNA files")
@@ -134,21 +101,14 @@ df_miRNA =pd.read_csv(args.info_file)
 print(df_miRNA.shape)
 print(df_miRNA.head())
 
-
-c_miRNA = list(df_miRNA['cases.0.case_id'])
-print(len(c_miRNA))
-
-
-print(df_miRNA.head())
 base_dir= args.directory
 
-total_data_miRNA= assemble_data_frame('miRNA', df_miRNA, c_miRNA,base_dir, columns_to_keep=['miRNA_ID','reads_per_million_miRNA_mapped'], extension='txt')
+total_data_miRNA= assemble_data_frame(df_miRNA,base_dir, columns_to_keep=['miRNA_ID','reads_per_million_miRNA_mapped'])
 total_data_miRNA = clean_data(total_data_miRNA, 50)
 
-total_data=pd.DataFrame()
 total_data=total_data_miRNA
 
-total_data.to_csv('pre_merge_total_data.csv',index=False)
+total_data.to_csv('pre_metadata_total_data.csv',index=False)
 other_data=get_meta_data(df_miRNA, list(total_data['case_id']))
 print(other_data.shape)
 other_data.to_csv('other_data.csv',index=False)
